@@ -20,7 +20,7 @@ type State int
 
 const (
 	Pending State = iota
-	Scheduler
+	Scheduled
 	Running
 	Completed
 	Failed
@@ -38,6 +38,7 @@ type Task struct {
 	RestartPolicy string
 	StartTime     time.Time
 	FinishTime    time.Time
+	ContainerID   string
 }
 
 type TaskEvent struct {
@@ -61,6 +62,17 @@ type Config struct {
 	Env           []string
 	RestartPolicy string
 	ContainerID   string
+}
+
+func NewConfig(t *Task) *Config {
+	return &Config{
+		Name:          t.Name,
+		Image:         t.Image,
+		Memory:        int64(t.Memory),
+		Disk:          int64(t.Disk),
+		ExposedPorts:  t.ExposedPorts,
+		RestartPolicy: t.RestartPolicy,
+	}
 }
 
 type Docker struct {
@@ -155,4 +167,13 @@ func (d *Docker) Stop(id string) DockerResult {
 	}
 
 	return DockerResult{Action: "stop", Result: "success", Error: nil}
+}
+
+// TODO: should it  be a pointer?
+func NewDocker(c *Config) *Docker {
+	cl, _ := client.NewClientWithOpts(client.FromEnv)
+	return &Docker{
+		Client: cl,
+		Config: *c,
+	}
 }
