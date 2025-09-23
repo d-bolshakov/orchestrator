@@ -28,6 +28,7 @@ func main() {
 
 	go w.RunTasks()
 	go w.CollectStats()
+	go w.UpdateTasks()
 	go wapi.Start()
 
 	fmt.Println("Starting manager")
@@ -37,6 +38,7 @@ func main() {
 
 	go m.ProcessTasks()
 	go m.UpdateTasks()
+	go m.DoHeathChecks()
 
 	mapi.Start()
 }
