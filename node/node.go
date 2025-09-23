@@ -11,3 +11,11 @@ type Node struct {
 	Role            string
 	TaskCount       int
 }
+
+func NewNode(name string, address string, role string) *Node {
+	return &Node{
+		Name: name,
+		Ip:   address,
+		Role: role,
+	}
+}
