@@ -1,17 +1,11 @@
 package scheduler
 
 import (
-	"encoding/json"
-	"fmt"
-	"io"
-	"log"
 	"math"
-	"net/http"
 	"time"
 
 	"github.com/d-bolshakov/orchestrator/node"
 	"github.com/d-bolshakov/orchestrator/task"
-	"github.com/d-bolshakov/orchestrator/worker"
 )
 
 const (
@@ -38,10 +32,16 @@ func (e *Epvm) Score(t task.Task, nodes []*node.Node) map[string]float64 {
 	maxJobs := 4.0
 
 	for _, node := range nodes {
-		cpuUsage := calculateCpuUsage(node)
+		cpuUsage, err := calculateCpuUsage(node)
+		if err != nil {
+			continue
+		}
 		cpuLoad := calculateLoad(cpuUsage, math.Pow(2, 0.8))
 
-		stats := getNodeStats(node)
+		stats, err := node.GetStats()
+		if err != nil {
+			continue
+		}
 		memoryAllocated := float64(stats.MemUsedKb()) + float64(node.MemoryAllocated)
 		memoryPercentAllocated := memoryAllocated / float64(node.Memory)
 
@@ -83,13 +83,19 @@ func (e *Epvm) Pick(scores map[string]float64, candidates []*node.Node) *node.No
 
 func hasEnoughDiskAvailable(node *node.Node, neededDisk int) bool {
 	available := node.Disk - node.DiskAllocated
-	return available >= neededDisk
+	return available >= int64(neededDisk)
 }
 
-func calculateCpuUsage(node *node.Node) float64 {
-	stat1 := getNodeStats(node)
+func calculateCpuUsage(node *node.Node) (float64, error) {
+	stat1, err := node.GetStats()
+	if err != nil {
+		return 0, err
+	}
 	time.Sleep(3 * time.Second)
-	stat2 := getNodeStats(node)
+	stat2, err := node.GetStats()
+	if err != nil {
+		return 0, err
+	}
 
 	stat1Idle := stat1.CpuStats.Idle + stat1.CpuStats.IOWait
 	stat2Idle := stat2.CpuStats.Idle + stat2.CpuStats.IOWait
@@ -110,29 +116,9 @@ func calculateCpuUsage(node *node.Node) float64 {
 		cpuPercentUsage = (float64(total) - float64(idle)) / float64(total)
 	}
 
-	return cpuPercentUsage
+	return cpuPercentUsage, nil
 }
 
 func calculateLoad(usage float64, capacity float64) float64 {
 	return usage / capacity
-}
-
-func getNodeStats(node *node.Node) *worker.Stats {
-	url := fmt.Sprintf("%s/stats", node.Ip)
-	resp, err := http.Get(url)
-	if err != nil {
-		log.Printf("Error connection to %v: %v", node.Ip, err)
-		return nil
-	}
-
-	if resp.StatusCode != 200 {
-		log.Printf("Error retrieving stats from %v: %v", node.Ip, err)
-		return nil
-	}
-
-	defer resp.Body.Close()
-	body, _ := io.ReadAll(resp.Body)
-	var stats worker.Stats
-	json.Unmarshal(body, &stats)
-	return &stats
 }
