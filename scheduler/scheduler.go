@@ -70,6 +70,11 @@ func GetByType(schedulerType string) Scheduler {
 			Name: "roundrobin",
 		}
 
+	case "epvm":
+		return &Epvm{
+			Name: "epvm",
+		}
+
 	default:
 		return &RoundRobin{
 			Name: "roundrobin",
