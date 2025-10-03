@@ -325,6 +325,25 @@ func (m *Manager) stopTask(worker string, taskID string) {
 	log.Printf("task %s has been scheduled to be stopped", taskID)
 }
 
+func (m *Manager) CollectStats() {
+	for {
+		log.Println("Collecting stats")
+		m.collectStats()
+		log.Println("Finished collecting stats, sleeping for 15 seconds")
+		time.Sleep(15 * time.Second)
+	}
+}
+
+func (m *Manager) collectStats() {
+	for _, node := range m.WorkerNodes {
+		_, err := node.GetStats()
+		if err != nil {
+			log.Printf("Error retrieving stats for node %s: %v\n", node.Name, err)
+			continue
+		}
+	}
+}
+
 func New(workers []string, schedulerType string, dbType string) *Manager {
 	taskDb := store.NewOfType[*task.Task](dbType, "tasks")
 	eventDb := store.NewOfType[*task.TaskEvent](dbType, "task_events")

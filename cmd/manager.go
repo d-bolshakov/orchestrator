@@ -33,6 +33,7 @@ The manager controls the orchestration system and is responsible for:
 		go m.ProcessTasks()
 		go m.UpdateTasks()
 		go m.DoHeathChecks()
+		go m.CollectStats()
 		log.Printf("Starting manager API on http://%s:%d", host, port)
 		api.Start()
 	},
