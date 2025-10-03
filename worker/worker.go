@@ -109,6 +109,7 @@ func (w *Worker) StartTask(t task.Task) task.DockerResult {
 	t.State = task.Running
 	w.Db.Put(t.ID.String(), &t)
 
+	w.TaskCount++
 	return result
 }
 
@@ -125,6 +126,7 @@ func (w *Worker) StopTask(t task.Task) task.DockerResult {
 	w.Db.Put(t.ID.String(), &t)
 	log.Printf("Stopped and removed container %s for task %s", t.ContainerID, t.ID)
 
+	w.TaskCount--
 	return stopResult
 }
 
