@@ -57,7 +57,7 @@ func (n *Node) GetStats() (*worker.Stats, error) {
 	return &n.Stats, nil
 }
 
-func NewNode(name string, address string, role string) *Node {
+func New(name string, address string, role string) *Node {
 	return &Node{
 		Name: name,
 		Ip:   address,

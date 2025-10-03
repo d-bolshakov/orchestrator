@@ -6,10 +6,7 @@ import (
 	"strconv"
 
 	"github.com/d-bolshakov/orchestrator/manager"
-	"github.com/d-bolshakov/orchestrator/task"
 	"github.com/d-bolshakov/orchestrator/worker"
-	"github.com/golang-collections/collections/queue"
-	"github.com/google/uuid"
 )
 
 func main() {
@@ -20,23 +17,14 @@ func main() {
 	mport, _ := strconv.Atoi(os.Getenv("ORCHESTRATOR_MANAGER_PORT"))
 
 	fmt.Println("Starting worker")
-	w1 := worker.Worker{
-		Queue: *queue.New(),
-		Db:    make(map[uuid.UUID]*task.Task),
-	}
-	wapi1 := worker.Api{Address: whost, Port: wport, Worker: &w1}
+	w1 := worker.New("inmemory")
+	wapi1 := worker.Api{Address: whost, Port: wport, Worker: w1}
 
-	w2 := worker.Worker{
-		Queue: *queue.New(),
-		Db:    make(map[uuid.UUID]*task.Task),
-	}
-	wapi2 := worker.Api{Address: whost, Port: wport + 1, Worker: &w2}
+	w2 := worker.New("inmemory")
+	wapi2 := worker.Api{Address: whost, Port: wport + 1, Worker: w2}
 
-	w3 := worker.Worker{
-		Queue: *queue.New(),
-		Db:    make(map[uuid.UUID]*task.Task),
-	}
-	wapi3 := worker.Api{Address: whost, Port: wport + 2, Worker: &w3}
+	w3 := worker.New("inmemory")
+	wapi3 := worker.Api{Address: whost, Port: wport + 2, Worker: w3}
 
 	go w1.RunTasks()
 	go w1.CollectStats()
@@ -59,7 +47,7 @@ func main() {
 		fmt.Sprintf("%s:%d", whost, wport+1),
 		fmt.Sprintf("%s:%d", whost, wport+2),
 	}
-	m := manager.New(workers, "epvm")
+	m := manager.New(workers, "epvm", "inmemory")
 	mapi := manager.Api{Address: mhost, Port: mport, Manager: m}
 
 	go m.ProcessTasks()

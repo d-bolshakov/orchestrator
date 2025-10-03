@@ -24,8 +24,8 @@ func (a *Api) StartTaskHandler(w http.ResponseWriter, r *http.Request) {
 
 	err := d.Decode(&te)
 	if err != nil {
-		msg := fmt.Sprintf("Error unmarshalling body: %v\n", err)
-		log.Printf(msg)
+		msg := fmt.Sprintf("Error unmarshalling body: %v", err)
+		log.Println(msg)
 		w.WriteHeader(400)
 		e := ErrResponse{
 			HTTPStatusCode: 400,
@@ -56,15 +56,14 @@ func (a *Api) StopTaskHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	tID, _ := uuid.Parse(taskID)
-	_, ok := a.Worker.Db[tID]
 
-	if !ok {
+	taskToStop, err := a.Worker.Db.Get(tID.String())
+	if err != nil {
+		// TODO: add better error handling
 		log.Printf("No task with ID %v found", tID)
 		w.WriteHeader(404)
 		return
 	}
-
-	taskToStop := a.Worker.Db[tID]
 	taskCopy := *taskToStop
 	taskCopy.State = task.Completed
 	a.Worker.AddTask(taskCopy)

@@ -63,7 +63,7 @@ func (r *RoundRobin) Pick(scores map[string]float64, candidates []*node.Node) *n
 	return bestNode
 }
 
-func GetByType(schedulerType string) Scheduler {
+func NewOfType(schedulerType string) Scheduler {
 	switch schedulerType {
 	case "roundrobin":
 		return &RoundRobin{

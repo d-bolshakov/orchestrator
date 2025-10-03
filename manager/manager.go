@@ -12,6 +12,7 @@ import (
 
 	"github.com/d-bolshakov/orchestrator/node"
 	"github.com/d-bolshakov/orchestrator/scheduler"
+	"github.com/d-bolshakov/orchestrator/store"
 	"github.com/d-bolshakov/orchestrator/task"
 	"github.com/d-bolshakov/orchestrator/worker"
 	"github.com/docker/go-connections/nat"
@@ -21,8 +22,8 @@ import (
 
 type Manager struct {
 	Pending       queue.Queue
-	TaskDb        map[uuid.UUID]*task.Task
-	EventDb       map[uuid.UUID]*task.TaskEvent
+	TaskDb        store.Store[*task.Task]
+	EventDb       store.Store[*task.TaskEvent]
 	Workers       []string
 	WorkerNodes   []*node.Node
 	WorkerTaskMap map[string][]uuid.UUID
@@ -84,20 +85,22 @@ func (m *Manager) updateTasks() {
 		for _, t := range tasks {
 			log.Printf("Attempting to update task %v\n", t.ID)
 
-			_, ok := m.TaskDb[t.ID]
-			if !ok {
-				log.Printf("Task with ID %s not found\n", t.ID)
+			task, err := m.TaskDb.Get(t.ID.String())
+			if err != nil {
+				log.Printf("Error retrieving task %s from DB: %v\n", t.ID, err)
 				continue
 			}
 
-			if m.TaskDb[t.ID].State != t.State {
-				m.TaskDb[t.ID].State = t.State
+			if task.State != t.State {
+				task.State = t.State
 			}
 
-			m.TaskDb[t.ID].StartTime = t.StartTime
-			m.TaskDb[t.ID].FinishTime = t.FinishTime
-			m.TaskDb[t.ID].ContainerID = t.ContainerID
-			m.TaskDb[t.ID].HostPorts = t.HostPorts
+			task.StartTime = t.StartTime
+			task.FinishTime = t.FinishTime
+			task.ContainerID = t.ContainerID
+			task.HostPorts = t.HostPorts
+
+			m.TaskDb.Put(t.ID.String(), task)
 		}
 	}
 }
@@ -110,12 +113,17 @@ func (m *Manager) SendWork() {
 
 	e := m.Pending.Dequeue()
 	te := e.(task.TaskEvent)
-	m.EventDb[te.ID] = &te
+	m.EventDb.Put(te.ID.String(), &te)
 	log.Printf("Pulled %v off pending queue\n", te)
 
 	taskWorker, ok := m.TaskWorkerMap[te.Task.ID]
 	if ok {
-		persistedTask := m.TaskDb[te.Task.ID]
+		persistedTask, err := m.TaskDb.Get(te.Task.ID.String())
+		if err != nil {
+			log.Printf("Error occurred retrieving task %s from DB: %v\n", te.Task.ID, err)
+			return
+		}
+
 		if te.State == task.Completed && task.ValidStateTransition(persistedTask.State, te.State) {
 			m.stopTask(taskWorker, te.Task.ID.String())
 			return
@@ -136,7 +144,7 @@ func (m *Manager) SendWork() {
 	m.TaskWorkerMap[t.ID] = w.Name
 
 	t.State = task.Scheduled
-	m.TaskDb[t.ID] = &t
+	m.TaskDb.Put(t.ID.String(), &t)
 
 	data, err := json.Marshal(te)
 	if err != nil {
@@ -183,9 +191,10 @@ func (m *Manager) ProcessTasks() {
 }
 
 func (m *Manager) GetTasks() []*task.Task {
-	tasks := []*task.Task{}
-	for _, t := range m.TaskDb {
-		tasks = append(tasks, t)
+	tasks, err := m.TaskDb.List()
+	if err != nil {
+		log.Printf("Error getting list of tasks: %v\n", err)
+		return nil
 	}
 	return tasks
 }
@@ -250,7 +259,7 @@ func (m *Manager) restartTask(t *task.Task) {
 	w := m.TaskWorkerMap[t.ID]
 	t.State = task.Scheduled
 	t.RestartCount++
-	m.TaskDb[t.ID] = t
+	m.TaskDb.Put(t.ID.String(), t)
 
 	te := task.TaskEvent{
 		ID:        uuid.New(),
@@ -316,9 +325,9 @@ func (m *Manager) stopTask(worker string, taskID string) {
 	log.Printf("task %s has been scheduled to be stopped", taskID)
 }
 
-func New(workers []string, schedulerType string) *Manager {
-	taskDb := make(map[uuid.UUID]*task.Task)
-	eventDb := make(map[uuid.UUID]*task.TaskEvent)
+func New(workers []string, schedulerType string, dbType string) *Manager {
+	taskDb := store.NewOfType[*task.Task](dbType)
+	eventDb := store.NewOfType[*task.TaskEvent](dbType)
 	workerTaskMap := make(map[string][]uuid.UUID)
 	taskWorkerMap := make(map[uuid.UUID]string)
 
@@ -327,7 +336,7 @@ func New(workers []string, schedulerType string) *Manager {
 		workerTaskMap[workers[worker]] = []uuid.UUID{}
 
 		nAPI := fmt.Sprintf("http://%v", workers[worker])
-		n := node.NewNode(workers[worker], nAPI, "worker")
+		n := node.New(workers[worker], nAPI, "worker")
 		nodes = append(nodes, n)
 	}
 
@@ -340,7 +349,7 @@ func New(workers []string, schedulerType string) *Manager {
 		WorkerTaskMap: workerTaskMap,
 		TaskWorkerMap: taskWorkerMap,
 		LastWorker:    0,
-		Scheduler:     scheduler.GetByType(schedulerType),
+		Scheduler:     scheduler.NewOfType(schedulerType),
 	}
 }
 

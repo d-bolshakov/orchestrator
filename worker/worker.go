@@ -6,15 +6,15 @@ import (
 	"log"
 	"time"
 
+	"github.com/d-bolshakov/orchestrator/store"
 	"github.com/d-bolshakov/orchestrator/task"
 	"github.com/golang-collections/collections/queue"
-	"github.com/google/uuid"
 )
 
 type Worker struct {
 	Name      string
 	Queue     queue.Queue
-	Db        map[uuid.UUID]*task.Task
+	Db        store.Store[*task.Task]
 	TaskCount int
 
 	Stats *Stats
@@ -59,10 +59,18 @@ func (w *Worker) runTask() task.DockerResult {
 
 	taskQueued := t.(task.Task)
 
-	taskPersisted := w.Db[taskQueued.ID]
-	if taskPersisted == nil {
+	taskPersisted, err := w.Db.Get(taskQueued.ID.String())
+	if err != nil {
+		// TODO: differentiate between the previously non-existent task and error which occurred during the retrieval
 		taskPersisted = &taskQueued
-		w.Db[taskQueued.ID] = taskPersisted
+		err := w.Db.Put(taskQueued.ID.String(), &taskQueued)
+		if err != nil {
+			msg := fmt.Errorf("error storing task %s: %v", taskQueued.ID.String(), err)
+			log.Println(msg)
+			return task.DockerResult{
+				Error: msg,
+			}
+		}
 	}
 
 	var result task.DockerResult
@@ -76,10 +84,10 @@ func (w *Worker) runTask() task.DockerResult {
 			result = w.StopTask(taskQueued)
 
 		default:
-			result.Error = errors.New("We should not get here")
+			result.Error = errors.New("we should not get here")
 		}
 	} else {
-		err := fmt.Errorf("Invalid transition from %v to %v", taskPersisted.State, taskQueued.State)
+		err := fmt.Errorf("invalid transition from %v to %v", taskPersisted.State, taskQueued.State)
 		result.Error = err
 	}
 	return result
@@ -93,13 +101,13 @@ func (w *Worker) StartTask(t task.Task) task.DockerResult {
 	if result.Error != nil {
 		log.Printf("Error running task %s: %v\n", t.ID, result.Error)
 		t.State = task.Failed
-		w.Db[t.ID] = &t
+		w.Db.Put(t.ID.String(), &t)
 		return result
 	}
 
 	t.ContainerID = result.ContainerId
 	t.State = task.Running
-	w.Db[t.ID] = &t
+	w.Db.Put(t.ID.String(), &t)
 
 	return result
 }
@@ -108,24 +116,24 @@ func (w *Worker) StopTask(t task.Task) task.DockerResult {
 	config := task.NewConfig(&t)
 	d := task.NewDocker(config)
 
-	result := d.Stop(t.ContainerID)
-	if result.Error != nil {
-		log.Printf("Error stopping container %s: %v\n", t.ID, result.Error)
+	stopResult := d.Stop(t.ContainerID)
+	if stopResult.Error != nil {
+		log.Printf("Error stopping container %s: %v\n", t.ID, stopResult.Error)
 	}
 	t.FinishTime = time.Now().UTC()
 	t.State = task.Completed
-	w.Db[t.ID] = &t
+	w.Db.Put(t.ID.String(), &t)
 	log.Printf("Stopped and removed container %s for task %s", t.ContainerID, t.ID)
 
-	return result
+	return stopResult
 }
 
-func (w *Worker) GetTasks() []task.Task {
-	tasks := make([]task.Task, 0, len(w.Db))
-	for _, v := range w.Db {
-		tasks = append(tasks, *v)
+func (w *Worker) GetTasks() []*task.Task {
+	tasks, err := w.Db.List()
+	if err != nil {
+		log.Printf("Error getting list of tasks: %v\n", err)
+		return nil
 	}
-
 	return tasks
 }
 
@@ -135,8 +143,13 @@ func (w *Worker) InspectTask(t task.Task) task.DockerInspectResponse {
 	return d.Inspect(t.ContainerID)
 }
 
-func (w *Worker) updateTasks() {
-	for id, t := range w.Db {
+func (w *Worker) updateTasks() error {
+	persistedTasks, err := w.Db.List()
+	if err != nil {
+		return err
+	}
+
+	for id, t := range persistedTasks {
 		if t.State == task.Running {
 			resp := w.InspectTask(*t)
 			if resp.Error != nil {
@@ -145,28 +158,46 @@ func (w *Worker) updateTasks() {
 			}
 
 			if resp.Container == nil {
-				log.Printf("No container for running task %s\n", id)
-				w.Db[id].State = task.Failed
+				log.Printf("No container for running task %d\n", id)
+				t.State = task.Failed
+				w.Db.Put(t.ID.String(), t)
 				continue
 			}
 
 			if resp.Container.State.Status == "exited" {
-				log.Printf("Container for task %s in non-running state %s", id, resp.Container.State.Status)
-				w.Db[id].State = task.Failed
+				log.Printf("Container for task %s in non-running state %s", t.ID, resp.Container.State.Status)
+				t.State = task.Failed
+				w.Db.Put(t.ID.String(), t)
 				continue
 			}
 
-			w.Db[id].HostPorts = resp.Container.NetworkSettings.NetworkSettingsBase.Ports
+			t.HostPorts = resp.Container.NetworkSettings.NetworkSettingsBase.Ports
+			w.Db.Put(t.ID.String(), t)
 		}
 	}
+
+	return nil
 }
 
 func (w *Worker) UpdateTasks() {
 	for {
 		log.Println("Checking status of tasks")
-		w.updateTasks()
+
+		err := w.updateTasks()
+		if err != nil {
+			log.Printf("Error updating tasks: %v\n", err)
+		}
 		log.Println("Task updates completed")
+
 		log.Println("Sleeping for 15 seconds")
 		time.Sleep(15 * time.Second)
+	}
+}
+
+func New(dbType string) *Worker {
+	db := store.NewOfType[*task.Task](dbType)
+	return &Worker{
+		Db:    db,
+		Queue: *queue.New(),
 	}
 }
