@@ -17,7 +17,7 @@ func (s *InMemoryStore[V]) Get(key string) (V, error) {
 	var v V
 	v, ok := s.db[key]
 	if !ok {
-		return v, fmt.Errorf("Value not found for key %s\n", key)
+		return v, fmt.Errorf("value not found for key %s", key)
 	}
 	return v, nil
 }

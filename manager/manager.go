@@ -326,8 +326,8 @@ func (m *Manager) stopTask(worker string, taskID string) {
 }
 
 func New(workers []string, schedulerType string, dbType string) *Manager {
-	taskDb := store.NewOfType[*task.Task](dbType)
-	eventDb := store.NewOfType[*task.TaskEvent](dbType)
+	taskDb := store.NewOfType[*task.Task](dbType, "tasks")
+	eventDb := store.NewOfType[*task.TaskEvent](dbType, "task_events")
 	workerTaskMap := make(map[string][]uuid.UUID)
 	taskWorkerMap := make(map[uuid.UUID]string)
 

@@ -195,7 +195,7 @@ func (w *Worker) UpdateTasks() {
 }
 
 func New(dbType string) *Worker {
-	db := store.NewOfType[*task.Task](dbType)
+	db := store.NewOfType[*task.Task](dbType, "tasks")
 	return &Worker{
 		Db:    db,
 		Queue: *queue.New(),
