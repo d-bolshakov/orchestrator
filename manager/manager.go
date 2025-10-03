@@ -156,7 +156,7 @@ func (m *Manager) SendWork() {
 	resp, err := http.Post(url, "application/json", bytes.NewBuffer(data))
 	if err != nil {
 		log.Printf("Error connecting to %v: %v\n", w, err)
-		m.Pending.Enqueue(&te)
+		m.Pending.Enqueue(te)
 		return
 	}
 
@@ -277,7 +277,7 @@ func (m *Manager) restartTask(t *task.Task) {
 	resp, err := http.Post(url, "application/json", bytes.NewBuffer(data))
 	if err != nil {
 		log.Printf("Error connecting to %v: %v", w, err)
-		m.Pending.Enqueue(t)
+		m.Pending.Enqueue(te)
 		return
 	}
 
