@@ -54,6 +54,7 @@ func (n *Node) GetStats() (*worker.Stats, error) {
 	n.Disk = int64(stats.DiskTotal())
 
 	n.Stats = stats
+	n.TaskCount = stats.TaskCount
 	return &n.Stats, nil
 }
 
