@@ -1,16 +1,13 @@
 package cmd
 
 import (
-	"encoding/json"
 	"fmt"
-	"io"
 	"log"
-	"net/http"
 	"os"
 	"text/tabwriter"
 	"time"
 
-	"github.com/d-bolshakov/orchestrator/task"
+	"github.com/d-bolshakov/orchestrator/client"
 	"github.com/docker/go-units"
 	"github.com/spf13/cobra"
 )
@@ -23,24 +20,11 @@ var statusCmd = &cobra.Command{
 The status command allows a user to get the status of tasks from the manager.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		manager, _ := cmd.Flags().GetString("manager")
-		url := fmt.Sprintf("http://%s/tasks", manager)
 
-		resp, err := http.Get(url)
+		client := client.New(manager, "manager")
+		tasks, err := client.GetTasks()
 		if err != nil {
-			log.Printf("Error connecting to %v: %v", url, err)
-			return
-		}
-
-		body, err := io.ReadAll(resp.Body)
-		if err != nil {
-			log.Fatal(err)
-		}
-		defer resp.Body.Close()
-
-		var tasks []*task.Task
-		err = json.Unmarshal(body, &tasks)
-		if err != nil {
-			log.Fatal(err)
+			log.Fatalf("Error retrieving the task list from the manager: %v", err)
 		}
 
 		w := tabwriter.NewWriter(os.Stdout, 0, 0, 5, ' ', tabwriter.TabIndent)

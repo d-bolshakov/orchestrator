@@ -1,15 +1,12 @@
 package cmd
 
 import (
-	"encoding/json"
 	"fmt"
-	"io"
 	"log"
-	"net/http"
 	"os"
 	"text/tabwriter"
 
-	"github.com/d-bolshakov/orchestrator/node"
+	"github.com/d-bolshakov/orchestrator/client"
 	"github.com/spf13/cobra"
 )
 
@@ -22,22 +19,11 @@ The node command allows a user to get the information about the nodes in the clu
 	Run: func(cmd *cobra.Command, args []string) {
 		manager, _ := cmd.Flags().GetString("manager")
 
-		url := fmt.Sprintf("http://%s/nodes", manager)
-		resp, err := http.Get(url)
+		client := client.NewManagerClient(manager)
+		nodes, err := client.GetNodes()
 		if err != nil {
-			log.Printf("Error connecting to %s: %v", manager, err)
-			return
+			log.Fatalf("Error retrieving the list of nodes from the manager: %v", err)
 		}
-		if resp.StatusCode != http.StatusOK {
-			log.Panicf("Error retrieving the node list from %s: %v", manager, err)
-			return
-		}
-		defer resp.Body.Close()
-
-		body, _ := io.ReadAll(resp.Body)
-
-		var nodes []*node.Node
-		json.Unmarshal(body, &nodes)
 
 		w := tabwriter.NewWriter(os.Stdout, 0, 0, 5, ' ', tabwriter.TabIndent)
 		fmt.Fprintf(w, "NAME\tMEMORY (MiB)\tDISK (GiB)\tROLE\tTASKS\t\n")

@@ -1,15 +1,15 @@
 package cmd
 
 import (
-	"bytes"
+	"encoding/json"
 	"errors"
-	"fmt"
 	"io/fs"
 	"log"
-	"net/http"
 	"os"
 	"path/filepath"
 
+	"github.com/d-bolshakov/orchestrator/client"
+	"github.com/d-bolshakov/orchestrator/task"
 	"github.com/spf13/cobra"
 )
 
@@ -40,16 +40,16 @@ The run command starts a new task.`,
 		}
 		log.Printf("Data: %v\n", string(data))
 
-		url := fmt.Sprintf("http://%s/tasks", manager)
-		resp, err := http.Post(url, "application/json", bytes.NewBuffer(data))
+		var te task.TaskEvent
+		err = json.Unmarshal(data, &te)
 		if err != nil {
-			log.Panic(err)
+			log.Fatalf("Error unmarshalling task to run: %v", err)
 		}
-		defer resp.Body.Close()
 
-		if resp.StatusCode != http.StatusCreated {
-			log.Printf("Error sending request: %v", resp.StatusCode)
-			return
+		client := client.New(manager, "manager")
+		_, err = client.SendTask(te)
+		if err != nil {
+			log.Fatalf("Error sending task to the manager: %v\n", err)
 		}
 
 		log.Println("Successfully sent task request to manager")

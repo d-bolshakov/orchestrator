@@ -1,10 +1,9 @@
 package cmd
 
 import (
-	"fmt"
 	"log"
-	"net/http"
 
+	"github.com/d-bolshakov/orchestrator/client"
 	"github.com/spf13/cobra"
 )
 
@@ -17,25 +16,11 @@ The stop command stops a running task.`,
 	Args: cobra.MaximumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		manager, _ := cmd.Flags().GetString("manager")
-		url := fmt.Sprintf("http://%s/tasks/%s", manager, args[0])
 
-		client := &http.Client{}
-
-		req, err := http.NewRequest("DELETE", url, nil)
+		client := client.New(manager, "manager")
+		err := client.StopTask(args[0])
 		if err != nil {
-			log.Printf("Error creating request %v: %v", url, err)
-			return
-		}
-
-		resp, err := client.Do(req)
-		if err != nil {
-			log.Printf("Error connecting to %v: %v", url, err)
-			return
-		}
-
-		if resp.StatusCode != http.StatusNoContent {
-			log.Printf("Error sending request: %v", err)
-			return
+			log.Fatalf("Error sending request for stopping the task: %v", err)
 		}
 
 		log.Printf("Task %v has been stopped.", args[0])
